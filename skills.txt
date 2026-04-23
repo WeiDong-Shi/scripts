@@ -1,2 +1,15 @@
-  https://github.com/obra/superpowers
-  https://github.com/tanweai/pua
+https://raw.githubusercontent.com/obra/superpowers/main/skills/brainstorming/SKILL.md
+https://raw.githubusercontent.com/obra/superpowers/main/skills/dispatching-parallel-agents/SKILL.md
+https://raw.githubusercontent.com/obra/superpowers/main/skills/executing-plans/SKILL.md
+https://raw.githubusercontent.com/obra/superpowers/main/skills/finishing-a-development-branch/SKILL.md
+https://raw.githubusercontent.com/obra/superpowers/main/skills/receiving-code-review/SKILL.md
+https://raw.githubusercontent.com/obra/superpowers/main/skills/requesting-code-review/SKILL.md
+https://raw.githubusercontent.com/obra/superpowers/main/skills/subagent-driven-development/SKILL.md
+https://raw.githubusercontent.com/obra/superpowers/main/skills/systematic-debugging/SKILL.md
+https://raw.githubusercontent.com/obra/superpowers/main/skills/test-driven-development/SKILL.md
+https://raw.githubusercontent.com/obra/superpowers/main/skills/using-git-worktrees/SKILL.md
+https://raw.githubusercontent.com/obra/superpowers/main/skills/using-superpowers/SKILL.md
+https://raw.githubusercontent.com/obra/superpowers/main/skills/verification-before-completion/SKILL.md
+https://raw.githubusercontent.com/obra/superpowers/main/skills/writing-plans/SKILL.md
+https://raw.githubusercontent.com/obra/superpowers/main/skills/writing-skills/SKILL.md
+https://raw.githubusercontent.com/tanweai/pua/main/skills/pua/SKILL.md
