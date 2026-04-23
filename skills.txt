@@ -1,2 +1,2 @@
-https://raw.githubusercontent.com/obra/superpowers/main/skills/using-superpowers/SKILL.md
-https://raw.githubusercontent.com/tanweai/pua/main/skills/pua/SKILL.md
+  https://github.com/obra/superpowers
+  https://github.com/tanweai/pua
