@@ -1,3 +1,2 @@
-superpowers
-plan- with-file-zh
-tanweai/pua
+https://raw.githubusercontent.com/obra/superpowers/main/skills/using-superpowers/SKILL.md
+https://raw.githubusercontent.com/tanweai/pua/main/skills/pua/SKILL.md
