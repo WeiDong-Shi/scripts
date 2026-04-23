@@ -15,7 +15,7 @@ usage() {
   -b <BASE_URL>   模型服务基础地址
   -k <API_KEY>    API Key
   -o <OUTPUT>     输出配置文件路径，默认: ${OUTPUT}
-  -s              从 skills.txt 安装默认 skills（每行一个 GitHub repo 地址，批量安装该仓库 skills/ 下所有技能）
+  -s              从 skills.txt 安装默认 skills（每行一个 SKILL.md 的 raw URL）
   -h              显示帮助
 EOF
 }
@@ -212,57 +212,16 @@ sanitize_skill_dir() {
   printf '%s' "$1" | sed 's|[^A-Za-z0-9._-]|-|g'
 }
 
-extract_repo_slug() {
-  local input="$1"
+skill_name_from_url() {
+  local url="$1"
+  local base
+  base=$(basename "$(dirname "$url")")
 
-  input="${input#https://github.com/}"
-  input="${input#http://github.com/}"
-  input="${input#git@github.com:}"
-  input="${input%.git}"
-  input="${input%/}"
-
-  if [[ "$input" == */tree/* ]]; then
-    input="${input%%/tree/*}"
+  if [ -z "$base" ] || [ "$base" = "." ] || [ "$base" = "/" ]; then
+    base="skill"
   fi
 
-  printf '%s' "$input"
-}
-
-install_repo_skills() {
-  local repo_slug="$1"
-  local api_url="https://api.github.com/repos/${repo_slug}/contents/skills"
-  local skill_names
-  local skill_name
-  local skill_dir
-  local skill_url
-  local installed_count=0
-
-  skill_names=$(curl -fsSL "$api_url" | jq -r '.[] | select(.type == "dir") | .name') || return 1
-
-  if [ -z "$skill_names" ]; then
-    return 1
-  fi
-
-  while IFS= read -r skill_name; do
-    [ -z "$skill_name" ] && continue
-
-    skill_dir="${SKILLS_ROOT}/$(sanitize_skill_dir "$skill_name")"
-    skill_url="https://raw.githubusercontent.com/${repo_slug}/main/skills/${skill_name}/SKILL.md"
-
-    mkdir -p "$skill_dir"
-
-    echo "    - $skill_name"
-
-    if curl -fsSL "$skill_url" -o "${skill_dir}/SKILL.md"; then
-      installed_count=$((installed_count + 1))
-    else
-      rm -f "${skill_dir}/SKILL.md"
-      rmdir "$skill_dir" 2>/dev/null || true
-      echo "      ⚠️ 下载失败: ${skill_url}"
-    fi
-  done <<< "$skill_names"
-
-  [ "$installed_count" -gt 0 ]
+  sanitize_skill_dir "$base"
 }
 
 install_default_skills() {
@@ -282,38 +241,43 @@ install_default_skills() {
 
   local success_count=0
   local fail_count=0
-  local repo_input
-  local repo_slug
+  local skill_url
+  local skill_name
+  local skill_dir
 
   echo "👉 安装默认 skills..."
 
-  while IFS= read -r repo_input; do
-    repo_input=$(printf '%s' "$repo_input" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+  while IFS= read -r skill_url; do
+    skill_url=$(printf '%s' "$skill_url" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
 
-    if [ -z "$repo_input" ] || [[ "$repo_input" = \#* ]]; then
+    if [ -z "$skill_url" ] || [[ "$skill_url" = \#* ]]; then
       continue
     fi
 
-    repo_slug=$(extract_repo_slug "$repo_input")
-
-    if ! printf '%s' "$repo_slug" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'; then
-      echo "  - $repo_input"
-      echo "    ⚠️ 这一行不是合法的 GitHub repo 地址，已跳过"
+    if [[ "$skill_url" != http://* && "$skill_url" != https://* ]]; then
+      echo "  - $skill_url"
+      echo "    ⚠️ 这一行不是合法的 raw URL，已跳过"
       fail_count=$((fail_count + 1))
       continue
     fi
 
-    echo "  - ${repo_slug}"
+    skill_name=$(skill_name_from_url "$skill_url")
+    skill_dir="${SKILLS_ROOT}/${skill_name}"
+    mkdir -p "$skill_dir"
 
-    if install_repo_skills "$repo_slug"; then
+    echo "  - ${skill_name}"
+
+    if curl -fsSL "$skill_url" -o "${skill_dir}/SKILL.md"; then
       success_count=$((success_count + 1))
     else
-      echo "    ⚠️ 未能从 ${repo_slug} 安装任何 skill，已跳过"
+      echo "    ⚠️ 下载失败: ${skill_url}"
+      rm -f "${skill_dir}/SKILL.md"
+      rmdir "$skill_dir" 2>/dev/null || true
       fail_count=$((fail_count + 1))
     fi
   done <<< "$SKILLS_CONTENT"
 
-  echo "✅ skills 安装完成，成功仓库: ${success_count}，失败仓库: ${fail_count}"
+  echo "✅ skills 安装完成，成功: ${success_count}，失败: ${fail_count}"
   echo "👉 skills 安装目录: ${SKILLS_ROOT}"
 }
 
