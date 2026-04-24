@@ -35,7 +35,7 @@ install_dependencies() {
   sudo apt-get update
 
   echo "👉 安装依赖..."
-  sudo apt-get install -y curl ca-certificates
+  sudo apt-get install -y --no-upgrade curl ca-certificates
 }
 
 source_shell_config() {
