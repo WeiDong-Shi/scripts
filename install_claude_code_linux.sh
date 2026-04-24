@@ -170,6 +170,7 @@ install_default_skills() {
   fi
 
   echo "👉 下载默认 skills 列表..."
+  mkdir -p "${HOME}/.claude/skills"
   while IFS= read -r skill_url; do
     skill_url="${skill_url%%#*}"
     skill_url="${skill_url%$'\r'}"
@@ -186,10 +187,10 @@ install_default_skills() {
         ;;
     esac
 
-    skill_dir="${HOME}/.config/opencode/skills/${skill_name}"
+    skill_dir="${HOME}/.claude/skills/${skill_name}"
     skill_file="${skill_dir}/SKILL.md"
     mkdir -p "$skill_dir"
-    echo "👉 安装 skill: $skill_name"
+    echo "👉 安装 Claude Code skill: $skill_name"
     curl -fsSL "$skill_url" -o "$skill_file"
   done < <(curl -fsSL "$SKILLS_LIST_URL")
 }
