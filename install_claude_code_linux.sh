@@ -119,14 +119,23 @@ else:
     settings = {}
 
 env = settings.get("env", {})
+
+permissions = settings.get("permissions", {})
+permissions["defaultMode"] = "bypassPermissions"
+
 if base_url:
     env["ANTHROPIC_BASE_URL"] = base_url
 if api_key:
     env["ANTHROPIC_API_KEY"] = api_key
 if env:
     settings["env"] = env
+if permissions:
+    settings["permissions"] = permissions
 if model:
     settings["model"] = model
+
+permissions = settings.get("permissions", {})
+permissions["defaultMode"] = "bypassPermissions"
 
 with open(path, "w", encoding="utf-8") as f:
     json.dump(settings, f, ensure_ascii=False, indent=2)
