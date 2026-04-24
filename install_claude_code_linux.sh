@@ -99,35 +99,39 @@ install_claude_code() {
   exit 1
 }
 
-upsert_env_var() {
-  local file="$1"
-  local key="$2"
-  local value="$3"
+upsert_claude_settings() {
+  local settings_dir="${HOME}/.claude"
+  local settings_file="${settings_dir}/settings.json"
 
-  [ -z "$value" ] && return
+  mkdir -p "$settings_dir"
 
-  touch "$file"
-
-  if grep -q "^export ${key}=" "$file"; then
-    python - "$file" "$key" "$value" <<'PY'
+  python - "$settings_file" "$BASE_URL" "$API_KEY" "$MODEL" <<'PY'
+import json
+import os
 import sys
-path, key, value = sys.argv[1:4]
-with open(path, 'r', encoding='utf-8') as f:
-    lines = f.readlines()
-with open(path, 'w', encoding='utf-8') as f:
-    replaced = False
-    for line in lines:
-        if line.startswith(f'export {key}=') and not replaced:
-            f.write(f'export {key}="{value}"\n')
-            replaced = True
-        else:
-            f.write(line)
-    if not replaced:
-        f.write(f'export {key}="{value}"\n')
+
+path, base_url, api_key, model = sys.argv[1:5]
+
+if os.path.exists(path):
+    with open(path, "r", encoding="utf-8") as f:
+        settings = json.load(f)
+else:
+    settings = {}
+
+env = settings.get("env", {})
+if base_url:
+    env["ANTHROPIC_BASE_URL"] = base_url
+if api_key:
+    env["ANTHROPIC_API_KEY"] = api_key
+if env:
+    settings["env"] = env
+if model:
+    settings["model"] = model
+
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(settings, f, ensure_ascii=False, indent=2)
+    f.write("\n")
 PY
-  else
-    printf 'export %s="%s"\n' "$key" "$value" >> "$file"
-  fi
 }
 
 ensure_claude_path() {
@@ -143,23 +147,8 @@ ensure_claude_path() {
 }
 
 write_env_vars() {
-  local shell_file
-  shell_file="$(select_shell_config)"
-
-  echo "👉 写入环境变量..."
-  upsert_env_var "$shell_file" "ANTHROPIC_BASE_URL" "$BASE_URL"
-  upsert_env_var "$shell_file" "ANTHROPIC_API_KEY" "$API_KEY"
-  upsert_env_var "$shell_file" "ANTHROPIC_DEFAULT_OPUS_MODEL" "$MODEL"
-
-  if [ -n "$BASE_URL" ]; then
-    export ANTHROPIC_BASE_URL="$BASE_URL"
-  fi
-  if [ -n "$API_KEY" ]; then
-    export ANTHROPIC_API_KEY="$API_KEY"
-  fi
-  if [ -n "$MODEL" ]; then
-    export ANTHROPIC_DEFAULT_OPUS_MODEL="$MODEL"
-  fi
+  echo "👉 写入 Claude Code 配置..."
+  upsert_claude_settings
 }
 
 install_default_skills() {
@@ -234,4 +223,4 @@ verify_installation
 
 echo "✅ 脚本执行完成"
 echo "👉 如果当前终端仍然识别不到 claude，请手动执行: source ~/.bashrc"
-echo "👉 已将 ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY / ANTHROPIC_DEFAULT_OPUS_MODEL 写入 ~/.bashrc，重启后仍然生效"
+echo "👉 已将 ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY 写入 ~/.claude/settings.json，并将 model 写入 Claude Code 配置"
