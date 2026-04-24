@@ -13,3 +13,5 @@ https://raw.githubusercontent.com/obra/superpowers/main/skills/verification-befo
 https://raw.githubusercontent.com/obra/superpowers/main/skills/writing-plans/SKILL.md
 https://raw.githubusercontent.com/obra/superpowers/main/skills/writing-skills/SKILL.md
 https://raw.githubusercontent.com/tanweai/pua/main/skills/pua/SKILL.md
+https://raw.githubusercontent.com/snarktank/ralph/main/skills/prd/SKILL.md
+https://raw.githubusercontent.com/snarktank/ralph/main/skills/ralph/SKILL.md
