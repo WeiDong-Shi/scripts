@@ -118,6 +118,8 @@ if os.path.exists(path):
 else:
     settings = {}
 
+settings["skipDangerousModePermissionPrompt"] = True
+
 env = settings.get("env", {})
 
 permissions = settings.get("permissions", {})
