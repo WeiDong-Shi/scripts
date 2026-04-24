@@ -5,17 +5,36 @@ set -euo pipefail
 BASE_URL=""
 API_KEY=""
 MODEL=""
+INSTALL_SKILLS=false
+SKILLS_LIST_URL="https://raw.githubusercontent.com/WeiDong-Shi/scripts/main/skills.txt"
 
 usage() {
   cat <<EOF
-用法: $0 [-b BASE_URL] [-k API_KEY] [-m MODEL] [-h]
+用法: $0 [-b BASE_URL] [-k API_KEY] [-m MODEL] [-s] [-h]
 
 参数:
   -b <BASE_URL>   写入 ANTHROPIC_BASE_URL
   -k <API_KEY>    写入 ANTHROPIC_API_KEY
   -m <MODEL>      写入 ANTHROPIC_DEFAULT_OPUS_MODEL
+  -s              安装默认 skills 列表中的 skills
   -h              显示帮助
 EOF
+}
+
+validate_required_args() {
+  if [ -z "$BASE_URL" ] || [ -z "$API_KEY" ] || [ -z "$MODEL" ]; then
+    echo "❌ 必须同时提供 -b BASE_URL、-k API_KEY、-m MODEL"
+    usage
+    exit 1
+  fi
+}
+
+select_shell_config() {
+  if [ -f "${HOME}/.bashrc" ] || [ ! -f "${HOME}/.bash_profile" ]; then
+    printf '%s\n' "${HOME}/.bashrc"
+  else
+    printf '%s\n' "${HOME}/.bash_profile"
+  fi
 }
 
 require_linux_apt() {
@@ -54,6 +73,8 @@ source_shell_config() {
 }
 
 install_claude_code() {
+  export PATH="${HOME}/.local/bin:${PATH}"
+
   if command -v claude >/dev/null 2>&1; then
     echo "✅ Claude Code 已安装: $(command -v claude)"
     return
@@ -109,17 +130,68 @@ PY
   fi
 }
 
-write_env_vars() {
-  local shell_file="${HOME}/.bashrc"
+ensure_claude_path() {
+  local shell_file
+  shell_file="$(select_shell_config)"
 
-  if [ ! -f "$shell_file" ] && [ -f "${HOME}/.bash_profile" ]; then
-    shell_file="${HOME}/.bash_profile"
+  export PATH="${HOME}/.local/bin:${PATH}"
+
+  touch "$shell_file"
+  if ! grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$shell_file"; then
+    printf 'export PATH="$HOME/.local/bin:$PATH"\n' >> "$shell_file"
   fi
+}
+
+write_env_vars() {
+  local shell_file
+  shell_file="$(select_shell_config)"
 
   echo "👉 写入环境变量..."
   upsert_env_var "$shell_file" "ANTHROPIC_BASE_URL" "$BASE_URL"
   upsert_env_var "$shell_file" "ANTHROPIC_API_KEY" "$API_KEY"
   upsert_env_var "$shell_file" "ANTHROPIC_DEFAULT_OPUS_MODEL" "$MODEL"
+
+  if [ -n "$BASE_URL" ]; then
+    export ANTHROPIC_BASE_URL="$BASE_URL"
+  fi
+  if [ -n "$API_KEY" ]; then
+    export ANTHROPIC_API_KEY="$API_KEY"
+  fi
+  if [ -n "$MODEL" ]; then
+    export ANTHROPIC_DEFAULT_OPUS_MODEL="$MODEL"
+  fi
+}
+
+install_default_skills() {
+  local skill_url skill_name skill_dir skill_file
+
+  if [ "$INSTALL_SKILLS" != true ]; then
+    return 0
+  fi
+
+  echo "👉 下载默认 skills 列表..."
+  while IFS= read -r skill_url; do
+    skill_url="${skill_url%%#*}"
+    skill_url="${skill_url%$'\r'}"
+    [ -z "$skill_url" ] && continue
+
+    case "$skill_url" in
+      */skills/*/SKILL.md)
+        skill_name="${skill_url%/SKILL.md}"
+        skill_name="${skill_name##*/}"
+        ;;
+      *)
+        echo "❌ skills 列表包含无效条目: $skill_url"
+        exit 1
+        ;;
+    esac
+
+    skill_dir="${HOME}/.config/opencode/skills/${skill_name}"
+    skill_file="${skill_dir}/SKILL.md"
+    mkdir -p "$skill_dir"
+    echo "👉 安装 skill: $skill_name"
+    curl -fsSL "$skill_url" -o "$skill_file"
+  done < <(curl -fsSL "$SKILLS_LIST_URL")
 }
 
 verify_installation() {
@@ -132,11 +204,12 @@ verify_installation() {
   claude --version
 }
 
-while getopts "b:k:m:h" opt; do
+while getopts "b:k:m:sh" opt; do
   case "$opt" in
     b) BASE_URL="$OPTARG" ;;
     k) API_KEY="$OPTARG" ;;
     m) MODEL="$OPTARG" ;;
+    s) INSTALL_SKILLS=true ;;
     h)
       usage
       exit 0
@@ -148,11 +221,14 @@ while getopts "b:k:m:h" opt; do
   esac
 done
 
+validate_required_args
 require_linux_apt
 install_dependencies
 install_claude_code
 write_env_vars
+ensure_claude_path
 source_shell_config
+install_default_skills
 verify_installation
 
 echo "✅ 脚本执行完成"
