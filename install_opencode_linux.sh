@@ -37,7 +37,7 @@ install_dependencies() {
   sudo apt-get update
 
   echo "👉 安装依赖..."
-  sudo apt-get install -y curl jq ca-certificates
+  sudo apt-get install -y --no-upgrade curl jq ca-certificates
 }
 
 source_shell_config() {
