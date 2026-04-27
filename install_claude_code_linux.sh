@@ -150,6 +150,7 @@ ensure_claude_path() {
   shell_file="$(select_shell_config)"
 
   export PATH="${HOME}/.local/bin:${PATH}"
+  export IS_SANDBOX=1
 
   touch "$shell_file"
   if ! grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$shell_file"; then
