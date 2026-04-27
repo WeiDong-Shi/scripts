@@ -156,6 +156,10 @@ ensure_claude_path() {
   if ! grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$shell_file"; then
     printf 'export PATH="$HOME/.local/bin:$PATH"\n' >> "$shell_file"
   fi
+
+  if ! grep -Fq 'export IS_SANDBOX=1' "$shell_file"; then
+    printf 'export IS_SANDBOX=1\n' >> "$shell_file"
+  fi
 }
 
 write_env_vars() {
