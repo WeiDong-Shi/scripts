@@ -147,18 +147,20 @@ PY
 
 ensure_claude_path() {
   local shell_file
+  
   shell_file="$(select_shell_config)"
 
-  export PATH="${HOME}/.local/bin:${PATH}"
   export IS_SANDBOX=1
-
+  export PATH="${HOME}/.local/bin:${PATH}"
+  
   touch "$shell_file"
-  if ! grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$shell_file"; then
-    printf 'export PATH="$HOME/.local/bin:$PATH"\n' >> "$shell_file"
-  fi
 
   if ! grep -Fq 'export IS_SANDBOX=1' "$shell_file"; then
     printf 'export IS_SANDBOX=1\n' >> "$shell_file"
+  fi
+  
+  if ! grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$shell_file"; then
+    printf 'export PATH="$HOME/.local/bin:$PATH"\n' >> "$shell_file"
   fi
 }
 
