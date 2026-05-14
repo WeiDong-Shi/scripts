@@ -16,3 +16,4 @@ https://raw.githubusercontent.com/tanweai/pua/main/skills/pua/SKILL.md
 https://raw.githubusercontent.com/snarktank/ralph/main/skills/prd/SKILL.md
 https://raw.githubusercontent.com/snarktank/ralph/main/skills/ralph/SKILL.md
 https://raw.githubusercontent.com/anthropics/skills/main/skills/frontend-design/SKILL.md
+https://github.com/multica-ai/andrej-karpathy-skills/blob/main/skills/karpathy-guidelines/SKILL.md
