@@ -54,7 +54,7 @@ install_dependencies() {
   sudo apt-get update
 
   echo "👉 安装依赖..."
-  sudo apt-get install -y --no-upgrade curl ca-certificates
+  sudo apt-get install -y --no-upgrade curl ca-certificates jq
 }
 
 source_shell_config() {
@@ -102,63 +102,60 @@ install_claude_code() {
 upsert_claude_settings() {
   local settings_dir="${HOME}/.claude"
   local settings_file="${settings_dir}/settings.json"
+  local tmp_file
 
   mkdir -p "$settings_dir"
+  tmp_file="$(mktemp)"
 
-  python - "$settings_file" "$BASE_URL" "$API_KEY" "$MODEL" <<'PY'
-import json
-import os
-import sys
+  if [ -f "$settings_file" ]; then
+    jq \
+      --arg base_url "$BASE_URL" \
+      --arg api_key "$API_KEY" \
+      --arg model "$MODEL" \
+      '
+      .skipDangerousModePermissionPrompt = true
+      | .permissions = ((.permissions // {}) + {defaultMode: "bypassPermissions"})
+      | .env = ((.env // {})
+          + (if $base_url != "" then {ANTHROPIC_BASE_URL: $base_url} else {} end)
+          + (if $api_key != "" then {ANTHROPIC_API_KEY: $api_key} else {} end))
+      | if $model != "" then .model = $model else . end
+      ' "$settings_file" > "$tmp_file"
+  else
+    jq -n \
+      --arg base_url "$BASE_URL" \
+      --arg api_key "$API_KEY" \
+      --arg model "$MODEL" \
+      '
+      {
+        skipDangerousModePermissionPrompt: true,
+        permissions: { defaultMode: "bypassPermissions" }
+      }
+      + (if $base_url != "" or $api_key != "" then {
+          env: (({})
+            + (if $base_url != "" then {ANTHROPIC_BASE_URL: $base_url} else {} end)
+            + (if $api_key != "" then {ANTHROPIC_API_KEY: $api_key} else {} end))
+        } else {} end)
+      + (if $model != "" then {model: $model} else {} end)
+      ' > "$tmp_file"
+  fi
 
-path, base_url, api_key, model = sys.argv[1:5]
-
-if os.path.exists(path):
-    with open(path, "r", encoding="utf-8") as f:
-        settings = json.load(f)
-else:
-    settings = {}
-
-settings["skipDangerousModePermissionPrompt"] = True
-
-env = settings.get("env", {})
-
-permissions = settings.get("permissions", {})
-permissions["defaultMode"] = "bypassPermissions"
-
-if base_url:
-    env["ANTHROPIC_BASE_URL"] = base_url
-if api_key:
-    env["ANTHROPIC_API_KEY"] = api_key
-if env:
-    settings["env"] = env
-if permissions:
-    settings["permissions"] = permissions
-if model:
-    settings["model"] = model
-
-permissions = settings.get("permissions", {})
-permissions["defaultMode"] = "bypassPermissions"
-
-with open(path, "w", encoding="utf-8") as f:
-    json.dump(settings, f, ensure_ascii=False, indent=2)
-    f.write("\n")
-PY
+  mv "$tmp_file" "$settings_file"
 }
 
 ensure_claude_path() {
   local shell_file
-  
+
   shell_file="$(select_shell_config)"
 
   export IS_SANDBOX=1
   export PATH="${HOME}/.local/bin:${PATH}"
-  
+
   touch "$shell_file"
 
   if ! grep -Fq 'export IS_SANDBOX=1' "$shell_file"; then
     printf 'export IS_SANDBOX=1\n' >> "$shell_file"
   fi
-  
+
   if ! grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$shell_file"; then
     printf 'export PATH="$HOME/.local/bin:$PATH"\n' >> "$shell_file"
   fi
