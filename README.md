@@ -1,7 +1,7 @@
 # scripts
 Some silly personal scripts.
 
-### Install OpenCode
+### Install OpenCode CLI
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/WeiDong-Shi/scripts/main/install_opencode_linux.sh | bash -s -- -b <your base url> -k <your api key> -s
@@ -11,4 +11,10 @@ curl -fsSL https://raw.githubusercontent.com/WeiDong-Shi/scripts/main/install_op
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/WeiDong-Shi/scripts/main/./install_claude_code_linux.sh | bash -s -- -b <your base url> -k <your api key> -m <your custom model name> -s
+```
+
+### Install Codex CLI
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/WeiDong-Shi/scripts/main/install_codex_linux.sh | bash -s -- -b <your base url> -k <your api key> -s
 ```
