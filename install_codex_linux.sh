@@ -1,38 +1,38 @@
 #!/usr/bin/env bash
 
-# install_codex_linux_no_env.sh
-# Install Codex CLI on Ubuntu/Debian and write API settings to config.toml.
-
 set -euo pipefail
 
-MODEL="gpt-5.1-codex"
+MODEL=""
 INSTALL_SKILLS=false
 
 show_help() {
   cat <<'EOF'
-用法: install_codex_linux_no_env.sh -b BASE_URL -k API_KEY [-m MODEL] [-s] [-h]
+用法: install_codex_linux.sh -b BASE_URL -k API_KEY [-m MODEL] [-s] [-h]
   -b  OpenAI-compatible 中转地址，例如 https://api.example.com/v1
   -k  API Key
-  -m  模型名，默认: gpt-5.1-codex
+  -m  模型名，可选；不传则不写入 model，让 Codex 使用自己的默认/可选模型
   -s  安装默认 Codex skills，可选，从当前目录 skills.txt 读取 Git 仓库地址
   -h  显示帮助
 EOF
+}
+
+fail() {
+  echo "$1" >&2
+  exit 1
+}
+
+need_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    fail "缺少命令: $1"
+  fi
 }
 
 is_root() {
   [ "$(id -u)" -eq 0 ]
 }
 
-need_cmd() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    echo "缺少命令: $1"
-    exit 1
-  fi
-}
-
 detect_debian_like() {
   if [ -f /etc/os-release ]; then
-    # shellcheck disable=SC1091
     . /etc/os-release
     case "${ID:-}:${ID_LIKE:-}" in
       debian:*|ubuntu:*|*:debian*|*:ubuntu*) return 0 ;;
@@ -42,71 +42,32 @@ detect_debian_like() {
   return 1
 }
 
-node_major_version() {
-  node -v 2>/dev/null | sed 's/^v//' | cut -d. -f1
-}
+ensure_dependencies() {
+  echo "检查系统依赖..."
+  detect_debian_like || fail "当前脚本仅支持 Ubuntu/Debian 自动安装依赖"
 
-install_node_root() {
-  detect_debian_like || {
-    echo "当前脚本仅支持 Ubuntu/Debian 自动安装 Node.js 22"
-    exit 1
-  }
-
-  echo "安装 Node.js 22 (root/apt)..."
-  need_cmd apt-get
-  apt-get update
-  apt-get install -y ca-certificates curl gnupg
-  need_cmd curl
-  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-  apt-get install -y nodejs
-}
-
-install_node_user() {
-  need_cmd curl
-
-  echo "安装 Node.js 22 (非 root/nvm)..."
-  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-
-  if [ ! -s "$NVM_DIR/nvm.sh" ]; then
-    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-  fi
-
-  # shellcheck disable=SC1091
-  . "$NVM_DIR/nvm.sh"
-
-  nvm install 22
-  nvm use 22
-  nvm alias default 22
-}
-
-ensure_node_22() {
-  if command -v node >/dev/null 2>&1 && [ "$(node_major_version)" = "22" ] && command -v npm >/dev/null 2>&1; then
-    echo "检测到 Node.js $(node -v)，跳过 Node.js 安装"
+  if command -v curl >/dev/null 2>&1 && \
+     command -v jq >/dev/null 2>&1 && \
+     command -v tar >/dev/null 2>&1 && \
+     command -v unzip >/dev/null 2>&1 && \
+     command -v git >/dev/null 2>&1; then
+    echo "系统依赖已满足"
     return 0
   fi
 
+  echo "安装缺失依赖: curl jq git ca-certificates tar unzip"
   if is_root; then
-    install_node_root
+    apt-get update
+    apt-get install -y --no-upgrade curl jq git ca-certificates tar unzip
   else
-    install_node_user
+    need_cmd sudo
+    sudo apt-get update
+    sudo apt-get install -y --no-upgrade curl jq git ca-certificates tar unzip
   fi
-
-  if ! command -v node >/dev/null 2>&1; then
-    echo "Node.js 安装失败: 未找到 node 命令"
-    exit 1
-  fi
-
-  if [ "$(node_major_version)" != "22" ]; then
-    echo "Node.js 22 安装失败，当前版本: $(node -v 2>/dev/null || echo unavailable)"
-    exit 1
-  fi
-
-  need_cmd npm
-  echo "Node.js 版本: $(node -v)"
-  echo "npm 版本: $(npm -v)"
 }
 
 ensure_user_path() {
+  echo "配置用户 PATH: $HOME/.local/bin"
   mkdir -p "$HOME/.local/bin"
   export PATH="$HOME/.local/bin:$PATH"
 
@@ -117,26 +78,108 @@ ensure_user_path() {
     touch "$profile"
     if ! grep -F "$path_line" "$profile" >/dev/null 2>&1; then
       printf '\n%s\n' "$path_line" >> "$profile"
+      echo "已写入 PATH 到: $profile"
     fi
   done
 }
 
-install_codex() {
-  need_cmd npm
+asset_arch_name() {
+  case "$(uname -m)" in
+    x86_64|amd64) printf '%s' 'x86_64' ;;
+    aarch64|arm64) printf '%s' 'aarch64' ;;
+    *) fail "不支持的架构: $(uname -m)" ;;
+  esac
+}
 
-  echo "安装 Codex CLI..."
-  if is_root; then
-    npm install -g @openai/codex
-  else
-    ensure_user_path
-    npm install --prefix "$HOME/.local" -g @openai/codex
+find_codex_asset_url() {
+  local arch_name
+  arch_name="$(asset_arch_name)"
+
+  curl -fsSL "https://api.github.com/repos/openai/codex/releases/latest" |
+    jq -r --arg name "codex-${arch_name}-unknown-linux-musl.tar.gz" '
+      .assets[]
+      | select(.name == $name)
+      | .browser_download_url
+    ' |
+    head -n 1
+}
+
+copy_codex_binary_from_dir() {
+  local source_dir="$1"
+  local install_path="$2"
+  local found
+
+  found="$(find "$source_dir" -type f \( -name codex -o -name 'codex-*unknown-linux-musl' \) -perm /111 | head -n 1)"
+  if [ -z "$found" ]; then
+    found="$(find "$source_dir" -type f \( -name codex -o -name 'codex-*unknown-linux-musl' \) | head -n 1)"
   fi
+
+  [ -n "$found" ] || return 1
+  echo "找到 Codex 二进制: $(basename "$found")"
+  cp "$found" "$install_path"
+}
+
+install_codex_binary() {
+  local asset_url
+  local tmp_dir
+  local asset_file
+  local install_dir
+  local install_path
+  local arch_name
+  local asset_name
+
+  if command -v codex >/dev/null 2>&1; then
+    echo "检测到 Codex: $(codex --version)"
+    return 0
+  fi
+
+  arch_name="$(asset_arch_name)"
+  asset_name="codex-${arch_name}-unknown-linux-musl.tar.gz"
+  echo "检测到系统架构: $arch_name"
+  echo "查询 Codex 最新 release..."
+  echo "匹配 Codex 安装包: $asset_name"
+
+  asset_url="$(find_codex_asset_url)"
+  if [ -z "$asset_url" ] || [ "$asset_url" = "null" ]; then
+    fail "未找到 Codex 安装包: $asset_name。请手动安装 Codex CLI 后重新运行本脚本。"
+  fi
+
+  tmp_dir="$(mktemp -d)"
+  asset_file="$tmp_dir/codex_asset"
+  install_dir="$HOME/.local/bin"
+  install_path="$install_dir/codex"
+
+  echo "下载 Codex: $asset_url"
+  curl -fL "$asset_url" -o "$asset_file"
+
+  mkdir -p "$install_dir"
+  echo "安装目录: $install_dir"
+
+  case "$asset_url" in
+    *.tar.gz|*.tgz)
+      echo "解压 Codex 安装包..."
+      tar -xzf "$asset_file" -C "$tmp_dir"
+      copy_codex_binary_from_dir "$tmp_dir" "$install_path" || fail "解压后未找到 Codex 二进制。请手动安装 Codex CLI 后重新运行本脚本。"
+      ;;
+    *.zip)
+      echo "解压 Codex 安装包..."
+      unzip -q "$asset_file" -d "$tmp_dir"
+      copy_codex_binary_from_dir "$tmp_dir" "$install_path" || fail "解压后未找到 Codex 二进制。请手动安装 Codex CLI 后重新运行本脚本。"
+      ;;
+    *)
+      cp "$asset_file" "$install_path"
+      ;;
+  esac
+
+  echo "安装 Codex 到: $install_path"
+  chmod +x "$install_path"
+  export PATH="$install_dir:$PATH"
 
   if ! command -v codex >/dev/null 2>&1; then
-    echo "Codex 安装后未在 PATH 中找到"
-    exit 1
+    fail "Codex 已安装到 $install_path，但当前 PATH 找不到。请确认 PATH 包含 $HOME/.local/bin。"
   fi
 
+  rm -rf "$tmp_dir"
   echo "Codex 版本: $(codex --version)"
 }
 
@@ -166,22 +209,30 @@ write_codex_config() {
     echo "已备份已有配置: $backup_file"
   fi
 
-  model_escaped="$(toml_escape "$MODEL")"
   base_url_escaped="$(toml_escape "$BASE_URL")"
   api_key_escaped="$(toml_escape "$API_KEY")"
 
-  umask 077
-  cat > "$config_file" <<EOF
-profile = "default"
-model = "$model_escaped"
-model_provider = "proxy"
+  echo "写入 Codex 配置: $config_file"
+  if [ -n "$MODEL" ]; then
+    echo "配置模型: $MODEL"
+  else
+    echo "未指定模型，跳过 model 配置"
+  fi
 
-[model_providers.proxy]
-name = "OpenAI-compatible proxy"
-base_url = "$base_url_escaped"
-wire_api = "responses"
-experimental_bearer_token = "$api_key_escaped"
-EOF
+  umask 077
+  {
+    if [ -n "$MODEL" ]; then
+      model_escaped="$(toml_escape "$MODEL")"
+      printf 'model = "%s"\n' "$model_escaped"
+    fi
+    echo 'model_provider = "proxy"'
+    echo
+    echo '[model_providers.proxy]'
+    echo 'name = "OpenAI-compatible proxy"'
+    printf 'base_url = "%s"\n' "$base_url_escaped"
+    echo 'wire_api = "responses"'
+    printf 'experimental_bearer_token = "%s"\n' "$api_key_escaped"
+  } > "$config_file"
 
   chmod 600 "$config_file"
   echo "Codex 配置写入 $config_file"
@@ -258,8 +309,9 @@ main() {
     exit 1
   fi
 
-  ensure_node_22
-  install_codex
+  ensure_dependencies
+  ensure_user_path
+  install_codex_binary
   write_codex_config
   install_skills
 
