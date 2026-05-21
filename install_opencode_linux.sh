@@ -4,6 +4,11 @@ set -euo pipefail
 
 OUTPUT="${HOME}/.config/opencode/opencode.json"
 INSTALL_DEFAULT_SKILLS=0
+# 自动按模型名称识别官方支持的 reasoning/thinking variants：
+#   OpenAI:    none / minimal / low / medium / high / xhigh
+#   Anthropic: high / max
+#   Google:    low / high
+# 其他未识别/未支持的模型不添加 variants。
 SKILLS_LIST_URL="https://raw.githubusercontent.com/WeiDong-Shi/scripts/main/skills.txt"
 SKILLS_ROOT="${HOME}/.config/opencode/skills"
 
@@ -17,6 +22,13 @@ usage() {
   -o <OUTPUT>     输出配置文件路径，默认: ${OUTPUT}
   -s              从 skills.txt 安装默认 skills（每行一个 SKILL.md 的 raw URL）
   -h              显示帮助
+
+说明:
+  脚本会自动按模型名称识别并添加官方支持的推理等级 variants：
+    OpenAI:    none / minimal / low / medium / high / xhigh
+    Anthropic: high / max
+    Google:    low / high
+  其他模型不会添加 variants。
 EOF
 }
 
@@ -37,7 +49,7 @@ install_dependencies() {
   sudo apt-get update
 
   echo "👉 安装依赖..."
-  sudo apt-get install -y --no-upgrade curl jq ca-certificates
+  sudo apt-get install -y --no-upgrade curl jq git ca-certificates
 }
 
 source_shell_config() {
@@ -100,6 +112,7 @@ fetch_models() {
     -H "Authorization: Bearer ${API_KEY}")
 }
 
+
 validate_models_json() {
   if ! echo "$MODELS_JSON" | jq -e '.data and (.data | type == "array")' >/dev/null 2>&1; then
     echo "❌ 拉取模型失败或返回格式不正确"
@@ -113,10 +126,12 @@ build_classified_models() {
     .data
     | map(
         .vendor =
-          (if (.id | startswith("gpt")) then "openai"
-           elif (.id | contains("claude")) then "anthropic"
-           elif (.id | contains("kimi")) then "moonshotai"
-           else "other" end)
+          ((.id | ascii_downcase) as $id
+           | if ($id | startswith("gpt") or startswith("o") or contains("openai")) then "openai"
+             elif ($id | contains("claude")) then "anthropic"
+             elif ($id | contains("gemini") or contains("google")) then "google"
+             elif ($id | contains("kimi") or contains("moonshot")) then "moonshotai"
+             else "other" end)
       )
   ')
 }
@@ -130,11 +145,106 @@ build_providers() {
   for V in $VENDORS; do
     echo "  - $V"
 
-    MODELS=$(echo "$CLASSIFIED" | jq --arg v "$V" '
+    MODELS=$(echo "$CLASSIFIED" | jq \
+      --arg v "$V" \
+      '
+      # OpenCode 官方 OpenAI variants：none / minimal / low / medium / high / xhigh
+      def openai_reasoning_variants:
+        {
+          variants: {
+            none: {
+              reasoningEffort: "none",
+              textVerbosity: "low",
+              reasoningSummary: "auto"
+            },
+            minimal: {
+              reasoningEffort: "minimal",
+              textVerbosity: "low",
+              reasoningSummary: "auto"
+            },
+            low: {
+              reasoningEffort: "low",
+              textVerbosity: "low",
+              reasoningSummary: "auto"
+            },
+            medium: {
+              reasoningEffort: "medium",
+              textVerbosity: "low",
+              reasoningSummary: "auto"
+            },
+            high: {
+              reasoningEffort: "high",
+              textVerbosity: "low",
+              reasoningSummary: "auto"
+            },
+            xhigh: {
+              reasoningEffort: "xhigh",
+              textVerbosity: "low",
+              reasoningSummary: "auto"
+            }
+          }
+        };
+
+      # OpenCode 官方 Anthropic variants：high / max
+      # 注意：本脚本所有 provider 默认都使用 @ai-sdk/openai-compatible。
+      # Claude thinking 是 Anthropic 原生参数；只有你的中转明确支持透传/转换时才会真正生效。
+      def anthropic_thinking_variants:
+        {
+          variants: {
+            high: {
+              thinking: {
+                type: "enabled",
+                budgetTokens: 16000
+              }
+            },
+            max: {
+              thinking: {
+                type: "enabled",
+                budgetTokens: 32000
+              }
+            }
+          }
+        };
+
+
+
+      # OpenCode 官方 Google variants：low / high
+      # Google Gemini 3 使用 thinkingLevel；Gemini 2.5 使用 thinkingBudget。
+      # 这里按官方 variant 名称走 thinkingLevel，是否生效取决于 provider/中转是否支持 providerOptions.google。
+      def google_thinking_variants:
+        {
+          variants: {
+            low: {
+              providerOptions: {
+                google: {
+                  thinkingConfig: {
+                    thinkingLevel: "low"
+                  }
+                }
+              }
+            },
+            high: {
+              providerOptions: {
+                google: {
+                  thinkingConfig: {
+                    thinkingLevel: "high"
+                  }
+                }
+              }
+            }
+          }
+        };
+
+      def model_extra($vendor):
+        if $vendor == "openai" then openai_reasoning_variants
+        elif $vendor == "anthropic" then anthropic_thinking_variants
+        elif $vendor == "google" then google_thinking_variants
+        else {} end;
+
       map(select(.vendor == $v))
       | map(
           (.id | sub("-[0-9]{8}$"; "")) as $clean
-          | { ($clean): { name: $clean } }
+          | { ($clean): ({ name: $clean } + model_extra($v)) }
         )
       | add
     ')
@@ -152,6 +262,7 @@ build_providers() {
             if $v == "openai" then "AI · OpenAI"
             elif $v == "anthropic" then "AI · Anthropic"
             elif $v == "moonshotai" then "AI · Moonshot"
+            elif $v == "google" then "AI · Google"
             else "AI · " + $v
             end
           ),
@@ -168,12 +279,12 @@ build_providers() {
 
 select_default_model() {
   DEFAULT_PROVIDER='ai/openai'
-  DEFAULT_MODEL=$(echo "$PROVIDERS" | jq -r '."ai/openai".models | keys[0]')
+  DEFAULT_MODEL=$(echo "$PROVIDERS" | jq -r '."ai/openai".models? // {} | keys[0] // empty')
 
   if [ "$DEFAULT_MODEL" = "null" ] || [ -z "$DEFAULT_MODEL" ]; then
     FIRST_VENDOR=$(echo "$VENDORS" | head -n1)
     DEFAULT_PROVIDER="ai/${FIRST_VENDOR}"
-    DEFAULT_MODEL=$(echo "$PROVIDERS" | jq -r --arg v "$DEFAULT_PROVIDER" '.[$v].models | keys[0]')
+    DEFAULT_MODEL=$(echo "$PROVIDERS" | jq -r --arg v "$DEFAULT_PROVIDER" '.[$v].models? // {} | keys[0] // empty')
   fi
 
   if [ "$DEFAULT_MODEL" = "null" ] || [ -z "$DEFAULT_MODEL" ]; then
@@ -200,6 +311,7 @@ write_config() {
 
   echo "✅ 完成: $OUTPUT"
   echo "👉 默认模型: $DEFAULT_PROVIDER/$DEFAULT_MODEL"
+  echo "👉 推理等级 variants: 自动识别 OpenAI / Anthropic / Google；其他模型不添加"
 }
 
 validate_output_json() {
