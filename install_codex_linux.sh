@@ -96,7 +96,8 @@ ensure_dependencies() {
       git \
       ca-certificates \
       tar \
-      unzip
+      unzip \
+      bubblewrap
   else
     need_cmd sudo
 
@@ -107,7 +108,8 @@ ensure_dependencies() {
       git \
       ca-certificates \
       tar \
-      unzip
+      unzip \
+      bubblewrap
   fi
 }
 
