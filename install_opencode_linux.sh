@@ -44,12 +44,33 @@ require_linux_apt() {
   fi
 }
 
-install_dependencies() {
-  echo "👉 更新 apt 索引..."
-  sudo apt-get update
+is_root() {
+  [ "$(id -u)" -eq 0 ]
+}
 
-  echo "👉 安装依赖..."
-  sudo apt-get install -y --no-upgrade curl jq git ca-certificates
+install_dependencies() {
+  echo "👉 检查系统依赖..."
+
+  if command -v curl >/dev/null 2>&1 && \
+     command -v jq >/dev/null 2>&1 && \
+     command -v git >/dev/null 2>&1; then
+    echo "✅ 系统依赖已满足"
+    return
+  fi
+
+  echo "👉 安装缺失依赖: curl jq git ca-certificates"
+  if is_root; then
+    apt-get update
+    apt-get install -y --no-upgrade curl jq git ca-certificates
+  else
+    if ! command -v sudo >/dev/null 2>&1; then
+      echo "❌ 缺少命令: sudo"
+      exit 1
+    fi
+
+    sudo apt-get update
+    sudo apt-get install -y --no-upgrade curl jq git ca-certificates
+  fi
 }
 
 source_shell_config() {
@@ -68,6 +89,8 @@ source_shell_config() {
 }
 
 install_opencode() {
+  echo "👉 检查 OpenCode 是否已安装..."
+
   if command -v opencode >/dev/null 2>&1; then
     echo "✅ opencode 已安装: $(command -v opencode)"
     return
@@ -107,7 +130,7 @@ normalize_base_url() {
 }
 
 fetch_models() {
-  echo "👉 拉取模型..."
+  echo "👉 请求模型列表: ${BASE_URL}/models"
   MODELS_JSON=$(curl -fsS "${BASE_URL}/models" \
     -H "Authorization: Bearer ${API_KEY}")
 }
@@ -296,7 +319,7 @@ select_default_model() {
 write_config() {
   mkdir -p "$(dirname "$OUTPUT")"
 
-  echo "👉 写入配置..."
+  echo "👉 写入 OpenCode 配置: $OUTPUT"
 
   jq -n \
     --argjson providers "$PROVIDERS" \
