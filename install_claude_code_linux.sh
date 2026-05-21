@@ -49,12 +49,32 @@ require_linux_apt() {
   fi
 }
 
-install_dependencies() {
-  echo "👉 更新 apt 索引..."
-  sudo apt-get update
+is_root() {
+  [ "$(id -u)" -eq 0 ]
+}
 
-  echo "👉 安装依赖..."
-  sudo apt-get install -y --no-upgrade curl ca-certificates jq
+install_dependencies() {
+  echo "👉 检查系统依赖..."
+
+  if command -v curl >/dev/null 2>&1 && \
+     command -v jq >/dev/null 2>&1; then
+    echo "✅ 系统依赖已满足"
+    return
+  fi
+
+  echo "👉 安装缺失依赖: curl ca-certificates jq"
+  if is_root; then
+    apt-get update
+    apt-get install -y --no-upgrade curl ca-certificates jq
+  else
+    if ! command -v sudo >/dev/null 2>&1; then
+      echo "❌ 缺少命令: sudo"
+      exit 1
+    fi
+
+    sudo apt-get update
+    sudo apt-get install -y --no-upgrade curl ca-certificates jq
+  fi
 }
 
 source_shell_config() {
@@ -75,6 +95,7 @@ source_shell_config() {
 install_claude_code() {
   export PATH="${HOME}/.local/bin:${PATH}"
 
+  echo "👉 检查 Claude Code 是否已安装..."
   if command -v claude >/dev/null 2>&1; then
     echo "✅ Claude Code 已安装: $(command -v claude)"
     return
@@ -147,6 +168,7 @@ ensure_claude_path() {
 
   shell_file="$(select_shell_config)"
 
+  echo "👉 配置 Claude Code PATH: ${HOME}/.local/bin"
   export IS_SANDBOX=1
   export PATH="${HOME}/.local/bin:${PATH}"
 
