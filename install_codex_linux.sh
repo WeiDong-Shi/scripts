@@ -81,7 +81,8 @@ ensure_dependencies() {
      command -v jq >/dev/null 2>&1 &&
      command -v tar >/dev/null 2>&1 &&
      command -v unzip >/dev/null 2>&1 &&
-     command -v git >/dev/null 2>&1; then
+     command -v git >/dev/null 2>&1; then &&
+     command -v bubblewrap >/dev/null 2>&1; then
     echo "系统依赖已满足"
     return 0
   fi
