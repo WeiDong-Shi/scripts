@@ -4,6 +4,7 @@ set -euo pipefail
 
 MODEL=""
 INSTALL_SKILLS=false
+SKILLS_LIST_URL="https://raw.githubusercontent.com/WeiDong-Shi/scripts/main/skills.txt"
 
 SCRIPT_SOURCE="${BASH_SOURCE[0]:-$0}"
 
@@ -26,7 +27,7 @@ show_help() {
       不传则不写入 model，让 Codex 使用默认模型
 
   -s  安装默认 Codex skills
-      从脚本目录中的 skills.txt 读取 Git 仓库地址
+      从远程默认 skills.txt 读取 SKILL.md 地址并安装到 Codex 默认目录
 
   -h  显示帮助
 
@@ -81,13 +82,13 @@ ensure_dependencies() {
      command -v jq >/dev/null 2>&1 &&
      command -v tar >/dev/null 2>&1 &&
      command -v unzip >/dev/null 2>&1 &&
-     command -v git >/dev/null 2>&1; then &&
-     command -v bubblewrap >/dev/null 2>&1; then
+     command -v git >/dev/null 2>&1 &&
+     command -v bwrap >/dev/null 2>&1; then
     echo "系统依赖已满足"
     return 0
   fi
 
-  echo "安装缺失依赖: curl jq git ca-certificates tar unzip"
+  echo "安装缺失依赖: curl jq git ca-certificates tar unzip bubblewrap"
 
   if is_root; then
     apt-get update
@@ -363,49 +364,42 @@ trim() {
 install_skills() {
   [ "$INSTALL_SKILLS" = true ] || return 0
 
-  local skills_file="$SCRIPT_DIR/skills.txt"
-
-  if [ ! -f "$skills_file" ]; then
-    echo "未找到 skills.txt: $skills_file"
-    echo "跳过 skills 安装"
-    return 0
-  fi
-
-  need_cmd git
-
-  local skills_dir="$HOME/.agents/skills"
-  local skill
-  local clean_skill
-  local name
-  local target
+  local skills_dir="${CODEX_HOME:-$HOME/.codex}/skills"
+  local skill_url
+  local skill_name
+  local skill_dir
+  local skill_file
 
   mkdir -p "$skills_dir"
 
-  echo "安装 skills..."
+  echo "下载默认 skills 列表..."
 
-  while IFS= read -r skill || [ -n "$skill" ]; do
-    skill="${skill%%#*}"
+  while IFS= read -r skill_url || [ -n "$skill_url" ]; do
+    skill_url="${skill_url%%#*}"
+    skill_url="${skill_url%$'\r'}"
+    skill_url="$(trim "$skill_url")"
 
-    skill="$(trim "$skill")"
+    [ -n "$skill_url" ] || continue
 
-    [ -n "$skill" ] || continue
+    case "$skill_url" in
+      */skills/*/SKILL.md)
+        skill_name="${skill_url%/SKILL.md}"
+        skill_name="${skill_name##*/}"
+        ;;
+      *)
+        fail "skills 列表包含无效条目: $skill_url"
+        ;;
+    esac
 
-    clean_skill="${skill%/}"
+    skill_dir="$skills_dir/$skill_name"
+    skill_file="$skill_dir/SKILL.md"
 
-    name="$(basename "$clean_skill" .git)"
+    mkdir -p "$skill_dir"
 
-    target="$skills_dir/$name"
+    echo "安装 Codex skill: $skill_name"
 
-    if [ -e "$target" ]; then
-      echo "skill 已存在，跳过: $target"
-      continue
-    fi
-
-    echo "安装 skill: $skill"
-
-    git clone "$skill" "$target"
-
-  done < "$skills_file"
+    curl -fsSL "$skill_url" -o "$skill_file"
+  done < <(curl -fsSL "$SKILLS_LIST_URL")
 }
 
 main() {
