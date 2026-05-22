@@ -334,6 +334,8 @@ write_codex_config() {
       printf 'model = "%s"\n' "$model_escaped"
     fi
 
+    echo 'ask_for_approval = "never"'
+    echo 'sandbox_mode = "danger-full-access"'
     echo 'model_provider = "proxy"'
     echo
     echo '[model_providers.proxy]'
