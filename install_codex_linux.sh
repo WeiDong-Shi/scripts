@@ -347,6 +347,10 @@ write_codex_config() {
 
     printf 'experimental_bearer_token = "%s"\n' "$api_key_escaped"
 
+    echo
+    echo '[tui]'
+    echo 'status_line = ["model-with-reasoning", "current-dir", "git-branch", "context-used"]'
+
   } > "$config_file"
 
   chmod 600 "$config_file"
