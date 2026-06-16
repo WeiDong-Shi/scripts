@@ -1,0 +1,26 @@
+model = ""
+ask_for_approval = "never"
+sandbox_mode = "danger-full-access"
+model_provider = "proxy"
+
+[model_providers.proxy]
+name = "OpenAI-compatible proxy"
+base_url = ""
+wire_api = "responses"
+experimental_bearer_token = ""
+
+[projects."/home/shiwd/.local/share/applications"]
+trust_level = "trusted"
+
+[projects."/home/shiwd"]
+trust_level = "trusted"
+
+[projects."/"]
+trust_level = "trusted"
+
+[tui]
+status_line = ["model-with-reasoning", "current-dir", "git-branch", "context-used"]
+status_line_use_colors = true
+
+[tui.model_availability_nux]
+"gpt-5.5" = 4
