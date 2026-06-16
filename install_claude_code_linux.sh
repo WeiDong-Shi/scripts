@@ -124,6 +124,12 @@ upsert_claude_settings() {
   local settings_dir="${HOME}/.claude"
   local settings_file="${settings_dir}/settings.json"
   local tmp_file
+  local statusline_command
+
+  statusline_command="$(cat <<'EOF'
+input=$(cat); cwd=$(printf '%s' "$input" | jq -r '.workspace.current_dir // .cwd // empty'); [ -n "$cwd" ] && cd "$cwd" 2>/dev/null; debian_chroot=""; if [ -r /etc/debian_chroot ]; then debian_chroot=$(cat /etc/debian_chroot); fi; printf '%s' "${debian_chroot:+($debian_chroot)}"; printf '\033[01;32m%s@%s\033[00m:\033[01;34m%s\033[00m' "$(whoami)" "$(hostname -s)" "$(pwd)"; pct=$(printf '%s' "$input" | jq -r '(.context_window.used_percentage // 0 | floor)'); case "$pct" in ''|*[!0-9]*) pct=0;; esac; [ "$pct" -gt 100 ] && pct=100; filled=$((pct/10)); bar=""; i=0; while [ "$i" -lt "$filled" ]; do bar="${bar}█"; i=$((i+1)); done; while [ "$i" -lt 10 ]; do bar="${bar}░"; i=$((i+1)); done; if [ "$pct" -lt 60 ]; then color='\033[01;32m'; elif [ "$pct" -lt 80 ]; then color='\033[01;33m'; else color='\033[01;31m'; fi; printf ' \033[01;34mContext\033[00m '; printf '%b[%s] %s%%%b \033[01;34mused\033[00m' "$color" "$bar" "$pct" '\033[00m'
+EOF
+)"
 
   mkdir -p "$settings_dir"
   tmp_file="$(mktemp)"
@@ -133,6 +139,7 @@ upsert_claude_settings() {
       --arg base_url "$BASE_URL" \
       --arg api_key "$API_KEY" \
       --arg model "$MODEL" \
+      --arg statusline_command "$statusline_command" \
       '
       .skipDangerousModePermissionPrompt = true
       | .permissions = ((.permissions // {}) + {defaultMode: "bypassPermissions"})
@@ -140,16 +147,19 @@ upsert_claude_settings() {
           + (if $base_url != "" then {ANTHROPIC_BASE_URL: $base_url} else {} end)
           + (if $api_key != "" then {ANTHROPIC_API_KEY: $api_key} else {} end))
       | if $model != "" then .model = $model else . end
+      | .statusLine = {type: "command", command: $statusline_command}
       ' "$settings_file" > "$tmp_file"
   else
     jq -n \
       --arg base_url "$BASE_URL" \
       --arg api_key "$API_KEY" \
       --arg model "$MODEL" \
+      --arg statusline_command "$statusline_command" \
       '
       {
         skipDangerousModePermissionPrompt: true,
-        permissions: { defaultMode: "bypassPermissions" }
+        permissions: { defaultMode: "bypassPermissions" },
+        statusLine: { type: "command", command: $statusline_command }
       }
       + (if $base_url != "" or $api_key != "" then {
           env: (({})
